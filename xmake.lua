@@ -6,7 +6,7 @@ includes("lib/commonlibf4")
 
 -- project
 set_project("PowerGridDoctor")
-set_version("0.1.0")
+set_version("0.2.0")
 set_license("GPL-3.0")
 
 set_languages("c++23")

@@ -1,6 +1,6 @@
 # PowerGridDoctor
 
-F4SE plugin (CommonLibF4, Address Library) for Fallout 4 **1.11.221** that finds
+F4SE plugin for Fallout 4 that finds
 workshop power grid entries pointing at objects that no longer exist, and shows
 **every place** that still refers to them. That tells us why a repair such as
 Workshop Framework's PowerGridTools does not survive a reload.
@@ -13,6 +13,20 @@ It checks, for each workshop:
 - the grid's currently powered list
 - `ExtraPowerLinks` on every wired object in the grid
 
+## Supported game versions
+
+One DLL for all three, built on the multi-runtime
+[Dear-Modding-FO4 CommonLibF4](https://github.com/Dear-Modding-FO4/commonlibf4) fork:
+
+| Game version | F4SE | Status |
+|---|---|---|
+| Anniversary 1.11.x (tested on 1.11.221) | 0.7.x | tested in game |
+| Next-gen 1.10.984 | 0.7.2 | **untested**, should work |
+| Old-gen 1.10.163 | 0.6.23 | **untested**, should work |
+
+If you're on old-gen or next-gen, please report whether it loads. Send `PowerGridDoctor.log`:
+its first lines say which game version it detected.
+
 ## Build (Windows)
 
 Requirements: Visual Studio 2022 (C++ desktop workload) and [XMake](https://xmake.io) 3.0+.
@@ -20,7 +34,7 @@ Requirements: Visual Studio 2022 (C++ desktop workload) and [XMake](https://xmak
 From the unzipped `PowerGridDoctor` folder (or a git clone of it):
 
 ```bat
-git clone --recurse-submodules https://github.com/libxse/commonlibf4 lib\commonlibf4
+git clone --recurse-submodules https://github.com/Dear-Modding-FO4/commonlibf4 lib\commonlibf4
 xmake
 ```
 
@@ -36,7 +50,7 @@ Copy into `Data\F4SE\Plugins\`:
 - `PowerGridDoctor.dll`
 - `PowerGridDoctor.ini` (from `dist\F4SE\Plugins\`)
 
-Requires the Address Library for F4SE matching your game version.
+Requires F4SE and the Address Library for F4SE matching your game version.
 [F4SE Menu Framework](https://github.com/DCCStudios/F4SEMenuFramework) is optional and adds the settlement page with Repair buttons.
 
 ## Use
