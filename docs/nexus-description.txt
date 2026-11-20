@@ -1,0 +1,144 @@
+===== MOD NAME =====
+Power Grid Doctor
+
+===== SHORT SUMMARY (Nexus "Brief overview", max 350 chars) =====
+Finds and repairs broken settlement power grids, including the leftover references that PowerGridTools and similar repairs miss, which is why their fixes keep coming back. Report-only by default; repair one settlement at a time from F4SE Menu Framework. One DLL for AE, next-gen and old-gen.
+
+===== DESCRIPTION (BBCode, paste into the Nexus description editor) =====
+
+[size=5][b]Power Grid Doctor[/b][/size]
+
+[size=3]Finds and repairs broken settlement power grids, and makes the repair [b]stick[/b].[/size]
+
+[b][color=#e69138]BETA:[/color][/b] tested on Anniversary Edition 1.11.221. Old-gen and next-gen should work but are [b]untested[/b]. Reports welcome (see "Reporting problems" below).
+
+[line]
+
+[size=4][b]The problem[/b][/size]
+
+When you scrap, store or move something that's part of a power grid, the game sometimes deletes the object but keeps references to it in the grid. That's a "broken" or "corrupted" power grid. It can cause crashes when you scrap or move nearby objects, and tools like Transfer Settlements or Workshop Framework will warn you about it.
+
+Existing repairs (Workshop Framework's PowerGridTools, Transfer Settlements' grid repair) remove the dead object from the grid's node list. But the game often keeps the same dead reference in [b]other places[/b] too, for example in the connection list of the conduit it was snapped to. When you save, the game writes those leftovers back, and the next time you load, the broken node is back. If you've ever repaired a grid and got the same warning on the next load, this is why.
+
+[size=4][b]What this mod does[/b][/size]
+
+[list]
+[*]Checks every settlement's power grids after you load a save and whenever you open the workshop menu.
+[*]Looks in [b]every[/b] place a grid stores object references:
+[list]
+[*]the grid's node list
+[*]the connection lists of the other objects in the grid (where the leftovers usually hide)
+[*]the grid's pending load data
+[*]the grid's list of powered objects
+[*]the wire links stored on each wired object
+[/list]
+[*]Reports every reference to an object that no longer exists, and exactly where it was found, in a log file.
+[*]Repairs a settlement on request by removing all of those references, then re-checks it.
+[*]Recognises a harmless vanilla quirk (pre-placed Vault 88 power connectors whose links use the DLC's internal IDs) and leaves it alone instead of "fixing" it.
+[/list]
+
+It [b]changes nothing unless you ask it to[/b]. By default it only reports.
+
+[line]
+
+[size=4][b]Requirements[/b][/size]
+
+[list]
+[*][url=https://f4se.silverlock.org/]Fallout 4 Script Extender (F4SE)[/url] for your game version
+[*]Address Library for F4SE Plugins, for your game version
+[*][b]Optional:[/b] [url=https://github.com/DCCStudios/F4SEMenuFramework]F4SE Menu Framework[/url] for the in-game settlement page with Repair buttons (recommended)
+[/list]
+
+[size=4][b]Supported game versions[/b][/size]
+
+One DLL for all three:
+[list]
+[*]Anniversary Edition 1.11.x (F4SE 0.7.x): [b]tested[/b] on 1.11.221
+[*]Next-gen 1.10.984 (F4SE 0.7.2): untested, should work
+[*]Old-gen 1.10.163 (F4SE 0.6.23): untested, should work
+[/list]
+
+[size=4][b]Installation[/b][/size]
+
+Install with your mod manager. Manual install: copy [i]PowerGridDoctor.dll[/i] and [i]PowerGridDoctor.ini[/i] into [i]Data\F4SE\Plugins\[/i].
+
+[line]
+
+[size=4][b]How to use[/b][/size]
+
+[b]1. Find out if you have a problem[/b]
+Load your save. If any settlement has a broken grid, a console message tells you. Details are in:
+[i]Documents\My Games\Fallout4\F4SE\PowerGridDoctor.log[/i]
+
+[b]2. Repair it (with F4SE Menu Framework)[/b]
+[list=1]
+[*][b]Make a backup save.[/b]
+[*]Open F4SE Menu Framework and go to [b]Power Grid Doctor > Settlements[/b]. Every settlement is listed with its status: green OK, or a red problem count.
+[*]Click [b]Repair[/b] next to the settlement with problems. Only that settlement is changed. The row shows what was removed.
+[*][b]Make a new hard save.[/b] Reload it and click [b]Rescan all[/b] to confirm it shows OK.
+[/list]
+
+[b]Without F4SE Menu Framework[/b]
+Set [i]bFix=1[/i] in [i]PowerGridDoctor.ini[/i], load your save, make a new hard save, then set [i]bFix=0[/i] again.
+[color=#e06666]This repairs EVERY settlement with problems on every load, so set it back to 0 afterwards.[/color]
+
+[b]If another tool offers to repair the grid[/b] (e.g. Transfer Settlements), you can decline it and use this one instead. If this mod repaired the grid when the save loaded, the other tool won't find anything to warn about.
+
+[line]
+
+[size=4][b]Compatibility[/b][/size]
+
+[list]
+[*][b]Workshop Framework / PowerGridTools, Transfer Settlements:[/b] compatible. This mod cleans up what their repairs leave behind.
+[*][b]Scrap Everything, Place Everywhere, settlement expansion mods:[/b] compatible. These are common ways grids end up broken, and this mod can clean up the result.
+[*]No plugin (.esp) and no scripts. It's a single F4SE DLL.
+[/list]
+
+[size=4][b]What it does NOT do[/b][/size]
+
+[list]
+[*]It doesn't [b]prevent[/b] grids from breaking. It repairs them afterwards. Running a scan after big scrapping sessions is a good habit.
+[*]It doesn't fix precombine/previs problems from scrapping (invisible or flickering objects, crashes in specific cells). That's a different issue. Look at PRP or similar.
+[*]It handles references to objects that no longer exist, which is the most common kind of corruption. Other kinds (one-way links, objects in two grids, links between settlements) are not handled yet. If your settlement still misbehaves after a repair, please send your log.
+[*]It doesn't fix saves you've already overwritten with older broken ones. Load the repaired save.
+[/list]
+
+[line]
+
+[size=4][b]Reporting problems[/b][/size]
+
+Please post in the comments or bugs tab with:
+[list]
+[*][i]Documents\My Games\Fallout4\F4SE\PowerGridDoctor.log[/i] (the first lines show your game version)
+[*]If the mod doesn't seem to load: [i]Documents\My Games\Fallout4\F4SE\f4se.log[/i]
+[*]Which settlement, and what you saw in game
+[/list]
+
+[b]Old-gen and next-gen players:[/b] even a "it loads and says all OK" report helps a lot.
+
+[size=4][b]FAQ[/b][/size]
+
+[b]Is it safe to install mid-playthrough?[/b]
+Yes. It only reads your settlements unless you click Repair (or set bFix=1). It adds nothing to your save, so you can uninstall it at any time.
+
+[b]Does it slow the game down?[/b]
+No. A full scan of 25 settlements takes about 30 milliseconds, and it only runs after loading a save and when you open the workshop menu.
+
+[b]It says Vault 88 has "plugin-local link ids". Is that a problem?[/b]
+No. That's how the DLC's pre-placed power connectors are stored, and the game handles it fine. The mod leaves them alone on purpose.
+
+[b]The repair worked but the warning came back.[/b]
+Make sure you made a [b]new hard save[/b] after repairing and loaded that save. If it still comes back, please send your log. That's exactly the kind of case we want to hear about.
+
+[line]
+
+[size=4][b]Source code and credits[/b][/size]
+
+Source code (GPL-3.0): [url=https://github.com/eblettry/PowerGridDoctor]github.com/eblettry/PowerGridDoctor[/url]
+
+[list]
+[*]Code written by Claude (Anthropic)
+[*][url=https://github.com/Dear-Modding-FO4/commonlibf4]CommonLibF4 (Dear-Modding-FO4 multi-runtime fork)[/url], based on the work of the CommonLibF4 and libxse contributors
+[*][url=https://github.com/DCCStudios/F4SEMenuFramework]F4SE Menu Framework[/url] by DCCStudios, a port of SKSE Menu Framework by QTR-Modding
+[*]The F4SE team and the Address Library authors
+[/list]
