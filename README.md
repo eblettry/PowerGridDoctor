@@ -17,11 +17,14 @@ It checks, for each workshop:
 
 Requirements: Visual Studio 2022 (C++ desktop workload) and [XMake](https://xmake.io) 3.0+.
 
+From the unzipped `PowerGridDoctor` folder (or a git clone of it):
+
 ```bat
-git clone --recurse-submodules <this repo> PowerGridDoctor
-cd PowerGridDoctor
+git clone --recurse-submodules https://github.com/libxse/commonlibf4 lib\commonlibf4
 xmake
 ```
+
+(If you cloned this project with `--recurse-submodules`, skip the first line.)
 
 The DLL ends up in `build\windows\x64\releasedbg\PowerGridDoctor.dll`.
 Or run `xmake install -o <folder>` to get a `Data\F4SE\Plugins\` layout that a mod manager can install.
