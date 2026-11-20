@@ -24,6 +24,16 @@
 
 using namespace std::literals;
 
+// CommonLibF4 doesn't define equality for GridConnection, but BSTSet needs it
+// to compile. Found through argument-dependent lookup by std::equal_to.
+namespace RE::PowerUtils
+{
+	[[nodiscard]] inline bool operator==(const GridConnection& a_lhs, const GridConnection& a_rhs) noexcept
+	{
+		return a_lhs.connection == a_rhs.connection && a_lhs.connector == a_rhs.connector;
+	}
+}
+
 namespace PGD
 {
 	// ------------------------------------------------------------------
