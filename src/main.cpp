@@ -17,6 +17,7 @@
 #include <format>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -167,6 +168,24 @@ namespace PGD
 		return a_ref && a_ref->extraList ? a_ref->extraList->GetByType<RE::ExtraPowerLinks>() : nullptr;
 	}
 
+	// Objects placed by a plugin can carry ExtraPowerLinks ids written with the
+	// plugin's own master-list index instead of its load order index. Example:
+	// Vault 88's starter connectors in DLCworkshop03.esm (load index 05) link to
+	// 01005633, which really means 05005633. The game copes with this, so these
+	// are not problems. Returns the id the link really points at, if that's the case.
+	std::optional<std::uint32_t> UnmappedPluginLink(std::uint32_t a_owner, std::uint32_t a_id)
+	{
+		if (Inspect(a_id) != Status::kMissing) {
+			return std::nullopt;
+		}
+		const std::uint32_t fileMask = (a_owner >> 24) == 0xFE ? 0xFFFFF000u : 0xFF000000u;  // light plugins: FExxx
+		const std::uint32_t candidate = (a_owner & fileMask) | (a_id & ~fileMask);
+		if (candidate == a_id || Inspect(candidate) != Status::kOK) {
+			return std::nullopt;
+		}
+		return candidate;
+	}
+
 	std::string Describe(std::uint32_t a_id)
 	{
 		switch (Inspect(a_id)) {
@@ -243,7 +262,7 @@ namespace PGD
 
 	// Walks every structure that can hold a power grid form id. a_members
 	// receives every id seen, so their ExtraPowerLinks can be checked too.
-	Findings Analyze(RE::Workshop::ExtraData& a_workshop, std::set<std::uint32_t>& a_members)
+	Findings Analyze(RE::Workshop::ExtraData& a_workshop, std::set<std::uint32_t>& a_members, std::size_t* a_unmappedLinks = nullptr)
 	{
 		Findings findings;
 
@@ -300,6 +319,12 @@ namespace PGD
 			}
 			for (std::uint32_t i = 0; i < links->powerLinks.size(); ++i) {
 				const auto& link = links->powerLinks[i];
+				if (UnmappedPluginLink(id, link.formID)) {
+					if (a_unmappedLinks) {
+						++*a_unmappedLinks;
+					}
+					continue;
+				}
 				Note(findings, link.formID,
 					std::format("ExtraPowerLinks [{}] on object [{:08X}] (link type {})", i, id, link.linkType));
 			}
@@ -326,8 +351,13 @@ namespace PGD
 				const auto links = GetPowerLinks(GetLiveRef(node));
 				if (links) {
 					for (const auto& link : links->powerLinks) {
-						REX::INFO("      link  -> [{:08X}] type {}{}", link.formID, link.linkType,
-							IsProblem(Inspect(link.formID)) ? "   <-- BAD" : "");
+						std::string note;
+						if (const auto real = UnmappedPluginLink(node, link.formID)) {
+							note = std::format("   (plugin-local id for [{:08X}], harmless)", *real);
+						} else if (IsProblem(Inspect(link.formID))) {
+							note = "   <-- BAD";
+						}
+						REX::INFO("      link  -> [{:08X}] type {}{}", link.formID, link.linkType, note);
 					}
 				}
 				if (!connections) {
@@ -487,12 +517,14 @@ namespace PGD
 			}
 
 			std::set<std::uint32_t> members;
-			const auto findings = Analyze(*extra, members);
+			std::size_t             unmappedLinks = 0;
+			const auto              findings = Analyze(*extra, members, &unmappedLinks);
 
 			if (findings.empty() && !g_settings.dumpAll) {
 				if (a_logHealthy) {
-					REX::INFO("workshop [{:08X}]: {} grid(s), {} objects, OK",
-						workshop->GetFormID(), extra->powerGrid.size(), members.size());
+					REX::INFO("workshop [{:08X}]: {} grid(s), {} objects, OK{}",
+						workshop->GetFormID(), extra->powerGrid.size(), members.size(),
+						unmappedLinks ? std::format(" ({} plugin-local link ids, harmless, left alone)", unmappedLinks) : std::string{});
 				}
 				continue;
 			}
