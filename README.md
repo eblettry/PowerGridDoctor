@@ -37,20 +37,35 @@ Copy into `Data\F4SE\Plugins\`:
 - `PowerGridDoctor.ini` (from `dist\F4SE\Plugins\`)
 
 Requires the Address Library for F4SE matching your game version.
+[F4SE Menu Framework](https://github.com/DCCStudios/F4SEMenuFramework) is optional and adds the settlement page with Repair buttons.
 
 ## Use
 
-1. **Report only (default, `bFix=0`)**: load your save, go to the settlement, open the workshop menu.
-2. Read `Documents\My Games\Fallout4\F4SE\PowerGridDoctor.log`.
-   For each bad id it lists every place that still references it.
-3. **Fix (`bFix=1`)**: make a backup save first. Set `bFix=1`, load the save, open the
-   workshop menu at the settlement, check the log says `0 problem id(s) remain`,
-   then make a **new hard save**. Quit, relaunch, load that save and check again
-   (with `bFix=0`).
+The plugin scans every settlement after a save loads and (with `bScanOnWorkshopMenu=1`)
+every time the workshop menu opens. It never changes anything unless you ask it to.
+A console message tells you when a settlement has problems.
 
-Scans happen after a save loads and (with `bScanOnWorkshopMenu=1`) every time the workshop menu opens.
-Grids of settlements you are not in may not be fully built right after loading, so the
-workshop menu scan at the settlement is the one that matters.
+### Repairing a settlement (with F4SE Menu Framework)
+
+1. Make a backup save.
+2. Open F4SE Menu Framework and go to **Power Grid Doctor > Settlements**. The table lists every
+   settlement, its object count and its power grid status.
+3. Click **Repair** next to the settlement with problems. Only that settlement is changed.
+   The row then shows what was removed.
+4. Make a new hard save. Reload it and check the settlement shows **OK** (use **Rescan all**).
+
+### Without F4SE Menu Framework
+
+Set `bFix=1` in the ini, load the save, make a new hard save, then set `bFix=0` again.
+This repairs **every** settlement with problems, so use it with care.
+
+### Log
+
+`Documents\My Games\Fallout4\F4SE\PowerGridDoctor.log` lists each problem id and every place that
+still references it, plus everything a repair removed.
+
+Grids of settlements you are not in may not be fully built right after loading. If a settlement
+looks wrong, scan or repair it while you're there.
 
 ## Notes / limits
 
@@ -63,3 +78,4 @@ workshop menu scan at the settlement is the one that matters.
   will show which structure the dead id came back in.
 
 License: GPL-3.0-or-later (required by CommonLibF4).
+`include/F4SEMenuFramework.h` comes from [F4SEMenuFrameworkExample](https://github.com/DCCStudios/F4SEMenuFrameworkExample) (MIT, see `include/F4SEMenuFramework.LICENSE.txt`).

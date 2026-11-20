@@ -11,12 +11,15 @@
 #include <F4SE/F4SE.h>
 #include <RE/Fallout.h>
 
+#include "PGD.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <format>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -502,71 +505,213 @@ namespace PGD
 		return result;
 	}
 
+	// ------------------------------------------------------------------
+	// Results shared with the menu page (UI.cpp)
+	// ------------------------------------------------------------------
+
+	std::mutex                  g_statusLock;
+	std::vector<WorkshopStatus> g_status;
+	std::string                 g_lastMessage;
+
+	void SetLastMessage(std::string a_message)
+	{
+		std::scoped_lock lock{ g_statusLock };
+		g_lastMessage = std::move(a_message);
+	}
+
+	std::string WorkshopName(RE::TESObjectREFR* a_workshop)
+	{
+		if (const auto location = a_workshop->GetCurrentLocation()) {
+			const auto name = RE::TESFullName::GetFullName(*location);
+			if (!name.empty()) {
+				return std::string{ name };
+			}
+		}
+		return std::format("Workshop {:08X}", a_workshop->GetFormID());
+	}
+
+	RE::Workshop::ExtraData* GetWorkshopData(RE::TESObjectREFR* a_ref)
+	{
+		if (!a_ref || a_ref->IsDeleted() || !a_ref->extraList) {
+			return nullptr;
+		}
+		return a_ref->extraList->GetByType<RE::Workshop::ExtraData>();
+	}
+
+	// Checks one workshop, logs the result and, if asked, repairs it.
+	WorkshopStatus ProcessWorkshop(RE::TESObjectREFR* a_workshop, RE::Workshop::ExtraData& a_extra, bool a_repair, bool a_logHealthy, std::size_t& a_removed)
+	{
+		WorkshopStatus status;
+		status.id = a_workshop->GetFormID();
+		status.name = WorkshopName(a_workshop);
+
+		std::set<std::uint32_t> members;
+		std::size_t             unmappedLinks = 0;
+		const auto              findings = Analyze(a_extra, members, &unmappedLinks);
+
+		status.grids = a_extra.powerGrid.size();
+		status.objects = members.size();
+		status.problems = findings.size();
+		status.pluginLocalLinks = unmappedLinks;
+
+		if (findings.empty() && !g_settings.dumpAll) {
+			if (a_logHealthy) {
+				REX::INFO("workshop [{:08X}] {}: {} grid(s), {} objects, OK{}",
+					status.id, status.name, status.grids, status.objects,
+					unmappedLinks ? std::format(" ({} plugin-local link ids, harmless, left alone)", unmappedLinks) : std::string{});
+			}
+			return status;
+		}
+
+		const auto& pos = a_workshop->data.location;
+		REX::INFO("workshop [{:08X}] {} at ({:.0f}, {:.0f}, {:.0f}): {} grid(s), {} objects, {} problem id(s)",
+			status.id, status.name, pos.x, pos.y, pos.z, status.grids, status.objects, findings.size());
+
+		DumpGrids(a_extra);
+
+		if (findings.empty()) {
+			return status;
+		}
+
+		REX::INFO("  PROBLEMS in workshop [{:08X}]:", status.id);
+		for (const auto& [id, finding] : findings) {
+			REX::INFO("  [{:08X}] {} - referenced from {} place(s):", id, StatusName(finding.status), finding.referencedFrom.size());
+			for (const auto& where : finding.referencedFrom) {
+				REX::INFO("      - {}", where);
+			}
+		}
+
+		if (a_repair) {
+			const auto removed = Repair(a_extra, findings, members);
+			a_removed += removed;
+
+			std::set<std::uint32_t> after;
+			const auto              remaining = Analyze(a_extra, after);
+			REX::INFO("  FIX: removed {} entries, {} problem id(s) remain", removed, remaining.size());
+
+			status.problems = remaining.size();
+			status.objects = after.size();
+			status.lastAction = std::format("Repaired: {} entries removed, {} problem(s) left. Save your game.", removed, remaining.size());
+		}
+
+		return status;
+	}
+
 	void ScanAll(std::string_view a_reason, bool a_logHealthy)
 	{
-		REX::INFO("==== Scan: {} (bFix={}) ====", a_reason, g_settings.fix);
+		const bool repairAll = g_settings.fix;
+		REX::INFO("==== Scan: {} (bFix={}) ====", a_reason, repairAll);
 
 		const auto workshops = FindWorkshops();
-		std::size_t withProblems = 0;
-		std::size_t totalRemoved = 0;
+
+		std::vector<WorkshopStatus> statuses;
+		std::size_t                 withProblems = 0;
+		std::size_t                 totalRemoved = 0;
 
 		for (const auto workshop : workshops) {
-			const auto extra = workshop->extraList->GetByType<RE::Workshop::ExtraData>();
+			const auto extra = GetWorkshopData(workshop);
 			if (!extra) {
 				continue;
 			}
-
-			std::set<std::uint32_t> members;
-			std::size_t             unmappedLinks = 0;
-			const auto              findings = Analyze(*extra, members, &unmappedLinks);
-
-			if (findings.empty() && !g_settings.dumpAll) {
-				if (a_logHealthy) {
-					REX::INFO("workshop [{:08X}]: {} grid(s), {} objects, OK{}",
-						workshop->GetFormID(), extra->powerGrid.size(), members.size(),
-						unmappedLinks ? std::format(" ({} plugin-local link ids, harmless, left alone)", unmappedLinks) : std::string{});
-				}
-				continue;
+			auto status = ProcessWorkshop(workshop, *extra, repairAll, a_logHealthy, totalRemoved);
+			if (status.problems > 0 || !status.lastAction.empty()) {
+				++withProblems;
 			}
-
-			const auto& pos = workshop->data.location;
-			REX::INFO("workshop [{:08X}] at ({:.0f}, {:.0f}, {:.0f}): {} grid(s), {} objects, {} problem id(s)",
-				workshop->GetFormID(), pos.x, pos.y, pos.z, extra->powerGrid.size(), members.size(), findings.size());
-
-			DumpGrids(*extra);
-
-			if (findings.empty()) {
-				continue;
-			}
-
-			++withProblems;
-			REX::INFO("  PROBLEMS in workshop [{:08X}]:", workshop->GetFormID());
-			for (const auto& [id, finding] : findings) {
-				REX::INFO("  [{:08X}] {} - referenced from {} place(s):", id, StatusName(finding.status), finding.referencedFrom.size());
-				for (const auto& where : finding.referencedFrom) {
-					REX::INFO("      - {}", where);
-				}
-			}
-
-			if (g_settings.fix) {
-				const auto removed = Repair(*extra, findings, members);
-				totalRemoved += removed;
-
-				std::set<std::uint32_t> after;
-				const auto remaining = Analyze(*extra, after);
-				REX::INFO("  FIX: removed {} entries, {} problem id(s) remain", removed, remaining.size());
-			}
+			statuses.push_back(std::move(status));
 		}
 
 		REX::INFO("==== Scan done: {} workshop(s), {} with problems{} ====",
 			workshops.size(), withProblems,
-			g_settings.fix ? std::format(", {} entries removed", totalRemoved) : std::string{});
+			repairAll ? std::format(", {} entries removed", totalRemoved) : std::string{});
+
+		{
+			std::scoped_lock lock{ g_statusLock };
+			// Keep the note of an earlier repair visible after a rescan.
+			for (auto& status : statuses) {
+				if (!status.lastAction.empty()) {
+					continue;
+				}
+				const auto old = std::ranges::find(g_status, status.id, &WorkshopStatus::id);
+				if (old != g_status.end()) {
+					status.lastAction = old->lastAction;
+				}
+			}
+			g_status = std::move(statuses);
+			g_lastMessage = std::format("Last scan: {} settlement(s), {} with problems", workshops.size(), withProblems);
+		}
 
 		if (withProblems > 0) {
 			if (const auto console = RE::ConsoleLog::GetSingleton()) {
 				console->Log("PowerGridDoctor: {} workshop(s) with power grid problems{}. See PowerGridDoctor.log",
-					withProblems, g_settings.fix ? " (fix applied - save your game)" : "");
+					withProblems, repairAll ? " (fix applied - save your game)" : "");
 			}
+		}
+	}
+
+	void RepairOne(std::uint32_t a_workshopID)
+	{
+		REX::INFO("==== Repair requested from the menu for workshop [{:08X}] ====", a_workshopID);
+
+		const auto form = RE::TESForm::GetFormByID(a_workshopID);
+		const auto workshop = form ? form->IsReference() : nullptr;
+		const auto extra = GetWorkshopData(workshop);
+		if (!extra) {
+			REX::INFO("  workshop not found");
+			SetLastMessage(std::format("Repair failed: workshop {:08X} not found", a_workshopID));
+			return;
+		}
+
+		std::size_t removed = 0;
+		auto        status = ProcessWorkshop(workshop, *extra, true, true, removed);
+		if (status.lastAction.empty()) {
+			status.lastAction = "Nothing to repair";
+		}
+
+		{
+			std::scoped_lock lock{ g_statusLock };
+			const auto       it = std::ranges::find(g_status, status.id, &WorkshopStatus::id);
+			if (it != g_status.end()) {
+				*it = status;
+			} else {
+				g_status.push_back(status);
+			}
+			g_lastMessage = std::format("{}: {}", status.name, status.lastAction);
+		}
+
+		if (const auto console = RE::ConsoleLog::GetSingleton()) {
+			console->Log("PowerGridDoctor: {} - {}", status.name, status.lastAction);
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// PGD.h interface
+	// ------------------------------------------------------------------
+
+	std::vector<WorkshopStatus> GetStatusSnapshot()
+	{
+		std::scoped_lock lock{ g_statusLock };
+		return g_status;
+	}
+
+	std::string GetLastMessage()
+	{
+		std::scoped_lock lock{ g_statusLock };
+		return g_lastMessage;
+	}
+
+	void RequestScan()
+	{
+		if (const auto tasks = F4SE::GetTaskInterface()) {
+			SetLastMessage("Scanning...");
+			tasks->AddTask([]() { ScanAll("rescan from menu"sv, false); });
+		}
+	}
+
+	void RequestRepair(std::uint32_t a_workshopID)
+	{
+		if (const auto tasks = F4SE::GetTaskInterface()) {
+			SetLastMessage("Repairing...");
+			tasks->AddTask([a_workshopID]() { RepairOne(a_workshopID); });
 		}
 	}
 
@@ -611,6 +756,13 @@ namespace PGD
 		case F4SE::MessagingInterface::kPostLoadGame:
 			ScanAll("save loaded"sv, true);
 			break;
+		case F4SE::MessagingInterface::kNewGame:
+			{
+				std::scoped_lock lock{ g_statusLock };
+				g_status.clear();
+				g_lastMessage.clear();
+			}
+			break;
 		default:
 			break;
 		}
@@ -630,6 +782,8 @@ F4SE_PLUGIN_LOAD(const F4SE::LoadInterface* a_f4se)
 		REX::ERROR("Failed to register the F4SE message listener");
 		return false;
 	}
+
+	PGD::RegisterMenu();
 
 	return true;
 }

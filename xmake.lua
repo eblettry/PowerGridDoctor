@@ -24,6 +24,8 @@ target("PowerGridDoctor", function()
     })
 
     add_files("src/**.cpp")
+    add_includedirs("include")
+    add_headerfiles("include/**.h")
     add_extrafiles("dist/F4SE/Plugins/PowerGridDoctor.ini")
     add_installfiles("dist/F4SE/Plugins/PowerGridDoctor.ini", { prefixdir = "F4SE/Plugins" })
 end)
