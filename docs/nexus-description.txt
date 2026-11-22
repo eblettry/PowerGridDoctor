@@ -34,7 +34,7 @@ Existing repairs (Workshop Framework's PowerGridTools, Transfer Settlements' gri
 [/list]
 [*]Reports every reference to an object that no longer exists, and exactly where it was found, in a log file.
 [*]Repairs a settlement on request by removing all of those references, then re-checks it.
-[*]Recognises a harmless vanilla quirk (pre-placed Vault 88 power connectors whose links use the DLC's internal IDs) and leaves it alone instead of "fixing" it.
+[*]Recognises harmless leftovers in plugin data (for example the wire links on Vault 88's pre-placed starter connectors) and leaves them alone instead of "fixing" them over and over.
 [/list]
 
 It [b]changes nothing unless you ask it to[/b]. By default it only reports.
@@ -124,8 +124,8 @@ Yes. It only reads your settlements unless you click Repair (or set bFix=1). It 
 [b]Does it slow the game down?[/b]
 No. A full scan of 25 settlements takes about 30 milliseconds, and it only runs after loading a save and when you open the workshop menu.
 
-[b]It says Vault 88 has "plugin-local link ids". Is that a problem?[/b]
-No. That's how the DLC's pre-placed power connectors are stored, and the game handles it fine. The mod leaves them alone on purpose.
+[b]It says Vault 88 has "harmless links in plugin data". Is that a problem?[/b]
+No. The DLC's pre-placed power connectors store their wire links in the DLC file, sometimes pointing at starter wires you may have scrapped. The power grid doesn't use those links, and the game reloads them from the DLC file every time, so the mod leaves them alone on purpose.
 
 [b]The repair worked but the warning came back.[/b]
 Make sure you made a [b]new hard save[/b] after repairing and loaded that save. If it still comes back, please send your log. That's exactly the kind of case we want to hear about.

@@ -189,6 +189,16 @@ namespace PGD
 		return candidate;
 	}
 
+	// Objects placed by a plugin (not built in this save) keep their wire links in
+	// the plugin file. A dead link there (for example to a DLC starter wire the
+	// player scrapped) isn't used by the grid, and removing it doesn't survive a
+	// reload, because the game reads the links from the plugin again. Report these
+	// as harmless instead of as problems.
+	bool IsPluginPlaced(std::uint32_t a_id)
+	{
+		return (a_id >> 24) != 0xFF;
+	}
+
 	std::string Describe(std::uint32_t a_id)
 	{
 		switch (Inspect(a_id)) {
@@ -323,7 +333,7 @@ namespace PGD
 			}
 			for (std::uint32_t i = 0; i < links->powerLinks.size(); ++i) {
 				const auto& link = links->powerLinks[i];
-				if (UnmappedPluginLink(id, link.formID)) {
+				if (UnmappedPluginLink(id, link.formID) || (IsPluginPlaced(id) && IsProblem(Inspect(link.formID)))) {
 					if (a_unmappedLinks) {
 						++*a_unmappedLinks;
 					}
@@ -359,7 +369,7 @@ namespace PGD
 						if (const auto real = UnmappedPluginLink(node, link.formID)) {
 							note = std::format("   (plugin-local id for [{:08X}], harmless)", *real);
 						} else if (IsProblem(Inspect(link.formID))) {
-							note = "   <-- BAD";
+							note = IsPluginPlaced(node) ? "   (dead link stored in plugin data, harmless, left alone)" : "   <-- BAD";
 						}
 						REX::INFO("      link  -> [{:08X}] type {}{}", link.formID, link.linkType, note);
 					}
@@ -559,7 +569,7 @@ namespace PGD
 			if (a_logHealthy) {
 				REX::INFO("workshop [{:08X}] {}: {} grid(s), {} objects, OK{}",
 					status.id, status.name, status.grids, status.objects,
-					unmappedLinks ? std::format(" ({} plugin-local link ids, harmless, left alone)", unmappedLinks) : std::string{});
+					unmappedLinks ? std::format(" ({} harmless links in plugin data, left alone)", unmappedLinks) : std::string{});
 			}
 			return status;
 		}
