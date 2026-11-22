@@ -76,7 +76,9 @@ This repairs **every** settlement with problems, so use it with care.
 ### Log
 
 `Documents\My Games\Fallout4\F4SE\PowerGridDoctor.log` lists each problem id and every place that
-still references it, plus everything a repair removed.
+still references it, the objects that hold the reference, and everything a repair removed.
+It's kept short (a few lines per problem) so it fits on pastebin; set `bDumpAll=1` to also write
+every settlement's full power grid.
 
 Grids of settlements you are not in may not be fully built right after loading. If a settlement
 looks wrong, scan or repair it while you're there.

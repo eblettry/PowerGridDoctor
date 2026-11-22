@@ -259,11 +259,12 @@ namespace PGD
 	{
 		Status                   status{ Status::kOK };
 		std::vector<std::string> referencedFrom;
+		std::set<std::uint32_t>  heldBy;  // live objects that still refer to the dead id
 	};
 
 	using Findings = std::map<std::uint32_t, Finding>;
 
-	void Note(Findings& a_findings, std::uint32_t a_id, std::string a_where)
+	void Note(Findings& a_findings, std::uint32_t a_id, std::string a_where, std::uint32_t a_heldBy = 0, std::uint32_t a_heldBy2 = 0)
 	{
 		const auto status = Inspect(a_id);
 		if (!IsProblem(status)) {
@@ -272,6 +273,11 @@ namespace PGD
 		auto& finding = a_findings[a_id];
 		finding.status = status;
 		finding.referencedFrom.push_back(std::move(a_where));
+		for (const auto holder : { a_heldBy, a_heldBy2 }) {
+			if (holder != 0 && holder != a_id && Inspect(holder) == Status::kOK) {
+				finding.heldBy.insert(holder);
+			}
+		}
 	}
 
 	// Walks every structure that can hold a power grid form id. a_members
@@ -296,11 +302,11 @@ namespace PGD
 				for (const auto& c : *connections) {
 					a_members.insert(c.connection);
 					Note(findings, c.connection,
-						std::format("grid #{}: connection from node [{:08X}] (via [{:08X}])", g, node, c.connector));
+						std::format("grid #{}: connection from node [{:08X}] (via [{:08X}])", g, node, c.connector), node);
 					if (c.connector != 0) {
 						a_members.insert(c.connector);
 						Note(findings, c.connector,
-							std::format("grid #{}: connector between [{:08X}] and [{:08X}]", g, node, c.connection));
+							std::format("grid #{}: connector between [{:08X}] and [{:08X}]", g, node, c.connection), node, c.connection);
 					}
 				}
 			}
@@ -310,10 +316,10 @@ namespace PGD
 				a_members.insert(d.node);
 				a_members.insert(d.connection.connection);
 				Note(findings, d.node, std::format("grid #{}: pending load data [{}] node", g, i));
-				Note(findings, d.connection.connection, std::format("grid #{}: pending load data [{}] connection", g, i));
+				Note(findings, d.connection.connection, std::format("grid #{}: pending load data [{}] connection", g, i), d.node);
 				if (d.connection.connector != 0) {
 					a_members.insert(d.connection.connector);
-					Note(findings, d.connection.connector, std::format("grid #{}: pending load data [{}] connector", g, i));
+					Note(findings, d.connection.connector, std::format("grid #{}: pending load data [{}] connector", g, i), d.node, d.connection.connection);
 				}
 			}
 
@@ -340,7 +346,7 @@ namespace PGD
 					continue;
 				}
 				Note(findings, link.formID,
-					std::format("ExtraPowerLinks [{}] on object [{:08X}] (link type {})", i, id, link.linkType));
+					std::format("ExtraPowerLinks [{}] on object [{:08X}] (link type {})", i, id, link.linkType), id);
 			}
 		}
 
@@ -520,6 +526,10 @@ namespace PGD
 	// Results shared with the menu page (UI.cpp)
 	// ------------------------------------------------------------------
 
+	// Problem ids last written to the log per workshop, so repeated scans
+	// don't write the same details again. Cleared when a save loads.
+	std::map<std::uint32_t, std::set<std::uint32_t>> g_lastLogged;
+
 	std::mutex                  g_statusLock;
 	std::vector<WorkshopStatus> g_status;
 	std::string                 g_lastMessage;
@@ -574,21 +584,42 @@ namespace PGD
 			return status;
 		}
 
-		const auto& pos = a_workshop->data.location;
-		REX::INFO("workshop [{:08X}] {} at ({:.0f}, {:.0f}, {:.0f}): {} grid(s), {} objects, {} problem id(s)",
-			status.id, status.name, pos.x, pos.y, pos.z, status.grids, status.objects, findings.size());
+		std::set<std::uint32_t> problemIds;
+		for (const auto& [id, finding] : findings) {
+			problemIds.insert(id);
+		}
 
-		DumpGrids(a_extra);
+		if (!a_repair && !g_settings.dumpAll && !findings.empty()) {
+			const auto last = g_lastLogged.find(status.id);
+			if (last != g_lastLogged.end() && last->second == problemIds) {
+				REX::INFO("workshop [{:08X}] {}: same {} problem id(s) as the last scan (details above)",
+					status.id, status.name, findings.size());
+				return status;
+			}
+		}
+		g_lastLogged[status.id] = problemIds;
+
+		const auto& pos = a_workshop->data.location;
+		REX::INFO("workshop [{:08X}] {} at ({:.0f}, {:.0f}, {:.0f}): {} grid(s), {} objects, {} problem id(s){}",
+			status.id, status.name, pos.x, pos.y, pos.z, status.grids, status.objects, findings.size(),
+			unmappedLinks ? std::format(", {} harmless links in plugin data", unmappedLinks) : std::string{});
+
+		// The full grid can be thousands of lines; only write it when asked.
+		if (g_settings.dumpAll) {
+			DumpGrids(a_extra);
+		}
 
 		if (findings.empty()) {
 			return status;
 		}
 
-		REX::INFO("  PROBLEMS in workshop [{:08X}]:", status.id);
 		for (const auto& [id, finding] : findings) {
-			REX::INFO("  [{:08X}] {} - referenced from {} place(s):", id, StatusName(finding.status), finding.referencedFrom.size());
+			REX::INFO("  PROBLEM [{:08X}] {}, referenced from:", id, StatusName(finding.status));
 			for (const auto& where : finding.referencedFrom) {
-				REX::INFO("      - {}", where);
+				REX::INFO("    - {}", where);
+			}
+			for (const auto holder : finding.heldBy) {
+				REX::INFO("    held by {}", Describe(holder));
 			}
 		}
 
@@ -765,6 +796,7 @@ namespace PGD
 			}
 			break;
 		case F4SE::MessagingInterface::kPostLoadGame:
+			g_lastLogged.clear();
 			ScanAll("save loaded"sv, true);
 			break;
 		case F4SE::MessagingInterface::kNewGame:
@@ -773,6 +805,7 @@ namespace PGD
 				g_status.clear();
 				g_lastMessage.clear();
 			}
+			g_lastLogged.clear();
 			break;
 		default:
 			break;
@@ -801,7 +834,9 @@ F4SE_PLUGIN_QUERY(const F4SE::QueryInterface* a_f4se, F4SE::PluginInfo* a_info)
 
 F4SE_PLUGIN_LOAD(const F4SE::LoadInterface* a_f4se)
 {
-	F4SE::Init(a_f4se);
+	F4SE::InitInfo init{};
+	init.logPattern = "[%T] %v";  // time only; the default adds milliseconds, thread and level to every line
+	F4SE::Init(a_f4se, init);
 
 	const auto runtime = REX::FModule::GetExecutingModule().GetFileVersion();
 	REX::INFO("Fallout 4 {} ({})", runtime.string(),
