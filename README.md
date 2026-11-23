@@ -85,8 +85,8 @@ looks wrong, scan or repair it while you're there.
 
 ## Notes / limits
 
-- Fix mode removes only references to objects that are missing or deleted.
-  Ids that resolve to a non-reference are reported but left alone.
+- Repair removes references to objects that are missing or deleted, and ids that now belong to
+  something that isn't a placed object (the game reuses the ids of deleted objects created during play).
 - The connection set of a removed node is intentionally leaked, not freed. That's a few bytes.
 - Only the objects in a grid are checked for `ExtraPowerLinks`. A wired object that is not in
   any grid but still links to a dead object would not be found.

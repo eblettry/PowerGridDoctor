@@ -151,11 +151,19 @@ namespace PGD
 		return a_status == Status::kMissing || a_status == Status::kDeleted || a_status == Status::kNotReference;
 	}
 
-	// Only these are removed in fix mode. "Not a reference" is reported but left
-	// alone, because we don't know what the game would expect there.
+	// Everything a power grid refers to must be a placed object. An id that is
+	// missing, deleted, or now belongs to something that isn't a placed object
+	// (the game reuses ids of deleted objects created during play) can't be a
+	// valid grid entry, so all three are removed in fix mode.
 	bool IsFixable(Status a_status)
 	{
-		return a_status == Status::kMissing || a_status == Status::kDeleted;
+		return a_status == Status::kMissing || a_status == Status::kDeleted || a_status == Status::kNotReference;
+	}
+
+	std::string FormTypeNote(std::uint32_t a_id)
+	{
+		const auto form = RE::TESForm::GetFormByID(a_id);
+		return form ? std::format(" (now a form of type {})", static_cast<std::uint32_t>(form->GetFormType())) : std::string{};
 	}
 
 	RE::TESObjectREFR* GetLiveRef(std::uint32_t a_id)
@@ -614,7 +622,8 @@ namespace PGD
 		}
 
 		for (const auto& [id, finding] : findings) {
-			REX::INFO("  PROBLEM [{:08X}] {}, referenced from:", id, StatusName(finding.status));
+			REX::INFO("  PROBLEM [{:08X}] {}{}, referenced from:", id, StatusName(finding.status),
+				finding.status == Status::kNotReference ? FormTypeNote(id) : std::string{});
 			for (const auto& where : finding.referencedFrom) {
 				REX::INFO("    - {}", where);
 			}
